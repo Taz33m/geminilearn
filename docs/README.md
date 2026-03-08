@@ -5,7 +5,7 @@ Contributors: Vera Malkova, Tazeem Mahashin
 
 With the recent boom in AI, there has been a lot of amazing technology that emerged, including AI tutors capable of digesting a lot of information quickly & explaining concepts clearly, answering almost any question you can possibly think of.
 
-So if there are so many other AI tutors that exist, why should you use this one? Most Ai tutors rely on simple text-in text-out interfaces. And whilst this does work well in some cases, there are some topics that could benefit from visual explanations, diagrams & a more interactive learning approach. This project provides that interactive workspace, merging the ability to draw out diagrams on a board, generate flashcards, google docs & google sheets. It also speeds up communication by allowing you to speak with your voice & by answering questions visually, with the aid of a diagram.
+So if there are so many other AI tutors that exist, why should you use this one? Most AI tutors rely on simple text-in text-out interfaces. And whilst this does work well in some cases, there are some topics that could benefit from visual explanations, diagrams & a more interactive learning approach. This project provides that interactive workspace, merging the ability to draw out diagrams on a board, generate flashcards, google docs & google sheets. It also speeds up communication by allowing you to speak with your voice & by answering questions visually, with the aid of a diagram.
 
 It breaks the typical “text box” paradigm by implementing an interactive whiteboard. It even goes beyond educational websites such as Khan Academy, making learning more interactive & giving you more freedom to break out of the structure & focus on what really interests you.
 
@@ -17,7 +17,7 @@ Learners who prefer active recall can generate flashcards & test their understan
 
 With all of this functionality, you might be wondering, how hard would it be to use something as complicated as this? But don’t worry, the interface remains very simple & easy to use. All the tools are laid out in neat little tabs (switching between the whiteboard, flash cards, google docs & google sheets). And on the left, we have the Gemini Live voice agent sidebar that you can open/close at any time.
 
-As a result, we have an interactive environment where learners can visualize, discuss & actively practice concepts.
+As a result, we have an easy to use interactive environment where learners can visualize, discuss & actively practice any concept. This greatly improves upon the already existing text-in text-out AI tutors, creating a more engaging learning platform, with more visual-aid to support you.
 
 ## 1. Product Vision
 Geminilearn reimagines classroom presentations by combining a teacher's essence with a voice-driven AI co-presenter. Instead of static slides, instructors speak naturally while an agent orchestrates supporting visuals, flash cards, and deep-dive explorations on a live canvas. The agent listens, understands the lesson context, and transforms requests into rich teaching aids in real time in the form of a multimodal intelligent canvas.
