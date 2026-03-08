@@ -1,4 +1,5 @@
 # Geminilearn - Personalized Professor for Multimodal, Accessible Learning
+Contributors: Vera Malkova, Tazeem Mahashin
 
 ## 1. Product Vision
 Geminilearn reimagines classroom presentations by combining a teacher's essence with a voice-driven AI co-presenter. Instead of static slides, instructors speak naturally while an agent orchestrates supporting visuals, flash cards, and deep-dive explorations on a live canvas. The agent listens, understands the lesson context, and transforms requests into rich teaching aids in real time in the form of a multimodal intelligent canvas.
