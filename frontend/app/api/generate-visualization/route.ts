@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateVisualization, GenerateVisualizationInput } from '@/lib/gemini/visualization';
+import { generateVisualization, GenerateVisualizationInput } from '@/lib/openai/visualization';
 import { z } from 'zod';
 
 const requestSchema = z.object({
-  imageDescription: z.string().min(10, 'Description must be at least 10 characters'),
+  imageDescription: z.string().min(2, 'Description must be at least 2 characters').optional(),
+  prompt: z.string().min(2, 'Prompt must be at least 2 characters').optional(),
+  topic: z.string().min(2, 'Topic must be at least 2 characters').optional(),
   canvasImageData: z.string().optional(), // Optional base64 data URL - provided by tool if canvas was captured
-});
+}).refine(
+  (value) => Boolean(value.imageDescription ?? value.prompt ?? value.topic),
+  {
+    message: 'Provide imageDescription, prompt, or topic.',
+    path: ['imageDescription'],
+  }
+);
 
 type RequestBody = z.infer<typeof requestSchema>;
 
@@ -17,6 +25,10 @@ export async function POST(request: NextRequest) {
     console.log('[api] Received request:', {
       hasImageDescription: !!json.imageDescription,
       imageDescriptionLength: json.imageDescription?.length,
+      hasPrompt: !!json.prompt,
+      promptLength: json.prompt?.length,
+      hasTopic: !!json.topic,
+      topicLength: json.topic?.length,
       hasCanvasImageData: !!json.canvasImageData,
       canvasImageDataLength: json.canvasImageData?.length,
     });
@@ -43,8 +55,23 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const imageDescription =
+      body.imageDescription?.trim() ||
+      body.prompt?.trim() ||
+      body.topic?.trim();
+
+    if (!imageDescription) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Provide imageDescription, prompt, or topic.',
+        },
+        { status: 400 }
+      );
+    }
+
     const result = await generateVisualization({
-      imageDescription: body.imageDescription,
+      imageDescription,
       canvasImageData: body.canvasImageData,
     } as GenerateVisualizationInput);
 

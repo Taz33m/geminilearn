@@ -8,9 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "smoke:voice": "node scripts/smoke-gemini-live.mjs",
-    "test:tool-events": "vitest run tests/workspace-tool-events.test.ts tests/session-update-pipeline.test.ts"
+    "test:tool-events": "vitest run tests/workspace-tool-events.test.ts tests/session-update-pipeline.test.ts tests/visualization-tools.test.ts"
   },
   "dependencies": {
+    "@google/adk": "^0.4.0",
     "@google/genai": "^1.29.0",
     "@tldraw/tldraw": "^4.1.2",
     "next": "16.0.1",

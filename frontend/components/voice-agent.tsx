@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { VoiceToolEvent, useVoiceAgent } from "@/hooks/useVoiceAgent";
 import { FlashcardSessionState, FlashcardActions } from "@/types/flashcard";
 import { VisualizationState, VisualizationActions } from "@/types/visualization";
 import { DeepDiveState, DeepDiveActions } from "@/types/deepdive";
+import type { GoogleDocSection, GoogleSheetTab } from "@/types/session";
 
 const statusText: Record<string, string> = {
   idle: "Idle",
@@ -39,6 +40,8 @@ interface VoiceAgentProps {
   deepDiveState: DeepDiveState;
   deepDiveActions: DeepDiveActions;
   setContentView: (view: 'flashcards' | 'visualization' | 'deepdive') => void;
+  onSetGoogleDoc?: (title: string, summary: string, sections: GoogleDocSection[]) => void;
+  onSetGoogleSheet?: (title: string, summary: string, sheets: GoogleSheetTab[]) => void;
   onToolEvent?: (event: VoiceToolEvent) => void;
   onStatusChange?: (status: string) => void;
 }
@@ -51,9 +54,26 @@ const VoiceAgent = ({
   deepDiveState,
   deepDiveActions,
   setContentView,
+  onSetGoogleDoc,
+  onSetGoogleSheet,
   onToolEvent,
   onStatusChange,
 }: VoiceAgentProps) => {
+  const [lastTool, setLastTool] = useState<{ name: string; success: boolean } | null>(null);
+
+  const wrappedOnToolEvent = useMemo(
+    () =>
+      onToolEvent
+        ? (event: VoiceToolEvent) => {
+            setLastTool({ name: event.toolName, success: event.success });
+            onToolEvent(event);
+          }
+        : (event: VoiceToolEvent) => {
+            setLastTool({ name: event.toolName, success: event.success });
+          },
+    [onToolEvent],
+  );
+
   const {
     status,
     error,
@@ -70,7 +90,9 @@ const VoiceAgent = ({
     deepDiveState,
     deepDiveActions,
     setContentView,
-    onToolEvent,
+    onSetGoogleDoc,
+    onSetGoogleSheet,
+    wrappedOnToolEvent,
   );
 
   useEffect(() => {
@@ -144,6 +166,13 @@ const VoiceAgent = ({
               : "not granted"}
           </div>
         </div>
+
+        {lastTool && (
+          <div className={`rounded-lg border px-3 py-2 text-xs ${lastTool.success ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-red-200 bg-red-50 text-red-700"}`}>
+            Tool: <span className="font-mono font-semibold">{lastTool.name}</span>{" "}
+            {lastTool.success ? "✓" : "✗"}
+          </div>
+        )}
 
         {error && (
           <div className="rounded-lg border border-brand-orange-dark/30 bg-brand-orange-dark/10 px-4 py-2.5 text-xs text-brand-orange-dark shadow-sm">

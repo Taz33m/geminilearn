@@ -13,6 +13,12 @@ export const generateDeterministicSummary = (
   const deepDives = session.artifacts.filter(
     (artifact) => artifact.type === "deep_dive_bundle",
   ).length;
+  const docs = session.artifacts.filter(
+    (artifact) => artifact.type === "google_doc",
+  ).length;
+  const sheets = session.artifacts.filter(
+    (artifact) => artifact.type === "google_sheet",
+  ).length;
 
   const parts: string[] = [];
   if (flashcardDecks > 0) {
@@ -23,6 +29,12 @@ export const generateDeterministicSummary = (
   }
   if (deepDives > 0) {
     parts.push(`${deepDives} deep dive${deepDives === 1 ? "" : "s"}`);
+  }
+  if (docs > 0) {
+    parts.push(`${docs} google doc${docs === 1 ? "" : "s"}`);
+  }
+  if (sheets > 0) {
+    parts.push(`${sheets} google sheet${sheets === 1 ? "" : "s"}`);
   }
 
   const text =

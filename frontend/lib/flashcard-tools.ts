@@ -92,6 +92,7 @@ export const createFlashcardToolHandlers = ({
   setContentView,
 }: FlashcardToolContext): Record<string, GeminiToolHandler> => ({
   generate_flashcards: async (args) => {
+    console.log("[flashcard-tools] generate_flashcards handler entered", args);
     const topic = getStringArg(args, "topic");
     const focus = getStringArg(args, "focus");
 
@@ -122,7 +123,6 @@ export const createFlashcardToolHandlers = ({
 
       const flashcards = payload.flashcards as Flashcard[];
       actions.setCards(flashcards);
-      actions.setMode("reviewing");
 
       const result = {
         success: true,

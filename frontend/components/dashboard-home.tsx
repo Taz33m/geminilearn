@@ -127,9 +127,9 @@ export default function DashboardHome() {
         </header>
 
         <section className="overflow-hidden rounded-xl border border-slate-200">
-          <div className="grid grid-cols-[minmax(0,1.6fr)_96px_92px_92px_96px] gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+          <div className="grid grid-cols-[minmax(0,1.35fr)_minmax(88px,0.45fr)_92px_92px_96px] gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             <span>Session</span>
-            <span>Status</span>
+            <span className="text-center">Status</span>
             <span className="text-center">Artifacts</span>
             <span className="text-center">Events</span>
             <span className="text-center">Actions</span>
@@ -140,7 +140,7 @@ export default function DashboardHome() {
               {sortedSessions.map((session) => (
                 <div
                   key={session.id}
-                  className="grid grid-cols-[minmax(0,1.6fr)_96px_92px_92px_96px] gap-2 px-4 py-3 text-sm"
+                  className="grid grid-cols-[minmax(0,1.35fr)_minmax(88px,0.45fr)_92px_92px_96px] gap-2 px-4 py-3 text-sm"
                 >
                   <button
                     type="button"
@@ -152,7 +152,7 @@ export default function DashboardHome() {
                     <p className="mt-1 text-[11px] text-slate-400">{formatTimestamp(session.updatedAt)}</p>
                   </button>
 
-                  <div className="flex items-center">
+                  <div className="flex items-center justify-center">
                     <StatusBadge status={session.status} />
                   </div>
 

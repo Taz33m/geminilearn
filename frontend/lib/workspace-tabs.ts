@@ -10,7 +10,6 @@ export type WorkspaceTabId =
   | "deepdive"
   | "sheets"
   | "docs"
-  | "slides"
   | "quiz";
 
 export interface WorkspaceTab {
@@ -48,14 +47,18 @@ const matchesSessionKeyword = (
   return byEvent || byArtifact;
 };
 
+const hasArtifactType = (
+  activeSession: TutorSession | null,
+  type: "google_doc" | "google_sheet",
+) => Boolean(activeSession?.artifacts.some((artifact) => artifact.type === type));
+
 export const hasSheetsArtifact = (activeSession: TutorSession | null) =>
+  hasArtifactType(activeSession, "google_sheet") ||
   matchesSessionKeyword(activeSession, ["sheet", "spreadsheet", "excel"]);
 
 export const hasDocsArtifact = (activeSession: TutorSession | null) =>
+  hasArtifactType(activeSession, "google_doc") ||
   matchesSessionKeyword(activeSession, ["doc", "memo", "document"]);
-
-export const hasSlidesArtifact = (activeSession: TutorSession | null) =>
-  matchesSessionKeyword(activeSession, ["slide", "presentation", "ppt"]);
 
 export const hasQuizArtifact = (activeSession: TutorSession | null) =>
   matchesSessionKeyword(activeSession, ["quiz", "assessment", "test", "exam"]);
@@ -82,9 +85,6 @@ export const buildWorkspaceTabs = ({
   }
   if (hasDocsArtifact(activeSession)) {
     next.push({ id: "docs", label: "Google Docs", kind: "artifact" });
-  }
-  if (hasSlidesArtifact(activeSession)) {
-    next.push({ id: "slides", label: "Google Slides", kind: "artifact" });
   }
   if (hasQuizArtifact(activeSession)) {
     next.push({ id: "quiz", label: "Quiz", kind: "artifact" });

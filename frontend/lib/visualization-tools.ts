@@ -12,29 +12,48 @@ export interface VisualizationToolContext {
   setContentView: (view: 'flashcards' | 'visualization' | 'deepdive') => void;
 }
 
+const VISUALIZATION_PARAMETERS_SCHEMA = {
+  type: "object",
+  properties: {
+    imageDescription: {
+      type: "string",
+      minLength: 2,
+      description:
+        "Detailed image or diagram request. Include topic, style, and any labels when possible.",
+    },
+    prompt: {
+      type: "string",
+      minLength: 2,
+      description:
+        "Alternate prompt field. Use this when the user asks for a diagram or visual.",
+    },
+    topic: {
+      type: "string",
+      minLength: 2,
+      description:
+        "Short topic name for the requested diagram (for example: photosynthesis cycle).",
+    },
+    includeCanvasImage: {
+      type: "boolean",
+      description:
+        "When true, capture current canvas and use it as additional input.",
+    },
+  },
+  additionalProperties: false,
+} as const;
+
 export const VISUALIZATION_FUNCTION_DECLARATIONS: FunctionDeclaration[] = [
   {
     name: "generate_visualization",
     description:
-      "Generate an educational visualization image for the student. Optionally include current canvas content.",
-    parametersJsonSchema: {
-      type: "object",
-      properties: {
-        imageDescription: {
-          type: "string",
-          minLength: 20,
-          description:
-            "Detailed image prompt including style, composition, and key details.",
-        },
-        includeCanvasImage: {
-          type: "boolean",
-          description:
-            "When true, capture current canvas and use it as additional input.",
-        },
-      },
-      required: ["imageDescription"],
-      additionalProperties: false,
-    },
+      "Generate an educational visualization image or diagram for the student. Use for diagram/chart/flow visual requests.",
+    parametersJsonSchema: VISUALIZATION_PARAMETERS_SCHEMA,
+  },
+  {
+    name: "generate_diagram",
+    description:
+      "Generate an educational diagram when the user asks to make, draw, or create a diagram.",
+    parametersJsonSchema: VISUALIZATION_PARAMETERS_SCHEMA,
   },
   {
     name: "show_flashcards",
@@ -63,19 +82,40 @@ const getBooleanArg = (
   return typeof value === "boolean" ? value : defaultValue;
 };
 
+const resolveVisualizationDescription = (args: Record<string, unknown>) => {
+  const raw =
+    getStringArg(args, "imageDescription") ??
+    getStringArg(args, "prompt") ??
+    getStringArg(args, "topic");
+
+  if (!raw) {
+    return undefined;
+  }
+
+  if (raw.length >= 18) {
+    return raw;
+  }
+
+  return `Create a clear educational diagram about ${raw} with labeled parts, directional arrows, and concise annotations.`;
+};
+
 export const createVisualizationToolHandlers = ({
   getCanvasEditor,
   actions,
   setContentView,
-}: VisualizationToolContext): Record<string, GeminiToolHandler> => ({
-  generate_visualization: async (args) => {
-    const imageDescription = getStringArg(args, "imageDescription");
-    const includeCanvasImage = getBooleanArg(args, "includeCanvasImage", false);
+}: VisualizationToolContext): Record<string, GeminiToolHandler> => {
+  const runVisualizationGeneration: GeminiToolHandler = async (args) => {
+    const imageDescription = resolveVisualizationDescription(args);
+    const includeCanvasImage = getBooleanArg(
+      args,
+      "includeCanvasImage",
+      false,
+    );
 
     if (!imageDescription) {
       const result = {
         success: false,
-        message: "imageDescription is required.",
+        message: "Please provide a topic or description for the diagram.",
       };
       playToolCue(result);
       return result;
@@ -142,25 +182,30 @@ export const createVisualizationToolHandlers = ({
       playToolCue(result);
       return result;
     }
-  },
+  };
 
-  show_flashcards: async () => {
-    try {
-      setContentView("flashcards");
-      const result = {
-        success: true,
-        message: "Switched back to flashcards view.",
-      };
-      playToolCue(result);
-      return result;
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : "Unknown error";
-      const result = {
-        success: false,
-        message: `Could not switch to flashcards: ${reason}`,
-      };
-      playToolCue(result);
-      return result;
-    }
-  },
-});
+  return {
+    generate_visualization: runVisualizationGeneration,
+    generate_diagram: runVisualizationGeneration,
+
+    show_flashcards: async () => {
+      try {
+        setContentView("flashcards");
+        const result = {
+          success: true,
+          message: "Switched back to flashcards view.",
+        };
+        playToolCue(result);
+        return result;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "Unknown error";
+        const result = {
+          success: false,
+          message: `Could not switch to flashcards: ${reason}`,
+        };
+        playToolCue(result);
+        return result;
+      }
+    },
+  };
+};

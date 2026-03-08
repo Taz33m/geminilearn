@@ -14,24 +14,9 @@ import {
   Modality,
   Session,
 } from "@google/genai";
+import type { FunctionTool } from "@google/adk";
 
-import {
-  CANVAS_FUNCTION_DECLARATIONS,
-  createCanvasToolHandlers,
-} from "@/lib/canvas-tools";
-import {
-  createDeepDiveToolHandlers,
-  DEEP_DIVE_FUNCTION_DECLARATIONS,
-} from "@/lib/deepdive-tools";
-import {
-  createFlashcardToolHandlers,
-  FLASHCARD_FUNCTION_DECLARATIONS,
-  GeminiToolHandler,
-} from "@/lib/flashcard-tools";
-import {
-  createVisualizationToolHandlers,
-  VISUALIZATION_FUNCTION_DECLARATIONS,
-} from "@/lib/visualization-tools";
+import { createAdkTools, runAdkTool } from "@/lib/adk-tools";
 import { canvasEditorRef } from "@/components/canvas";
 import { FlashcardSessionState, FlashcardActions } from "@/types/flashcard";
 import {
@@ -39,6 +24,7 @@ import {
   VisualizationActions,
 } from "@/types/visualization";
 import { DeepDiveState, DeepDiveActions } from "@/types/deepdive";
+import type { GoogleDocSection, GoogleSheetTab } from "@/types/session";
 
 type VoiceStatus =
   | "idle"
@@ -53,6 +39,7 @@ export interface VoiceToolEvent {
   args: Record<string, unknown>;
   success: boolean;
   message: string;
+  output?: Record<string, unknown>;
   timestamp: Date;
 }
 
@@ -72,12 +59,7 @@ const LIVE_CONTEXT_COMPRESSION_TRIGGER =
 const LIVE_CONTEXT_COMPRESSION_TARGET =
   process.env.NEXT_PUBLIC_GEMINI_LIVE_CONTEXT_TARGET_TOKENS;
 
-const FUNCTION_DECLARATIONS = [
-  ...FLASHCARD_FUNCTION_DECLARATIONS,
-  ...CANVAS_FUNCTION_DECLARATIONS,
-  ...VISUALIZATION_FUNCTION_DECLARATIONS,
-  ...DEEP_DIVE_FUNCTION_DECLARATIONS,
-];
+// FunctionDeclarations are derived at runtime from ADK FunctionTool instances (see useVoiceAgent).
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
@@ -124,31 +106,58 @@ const parseSampleRateFromMimeType = (
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
-const buildAgentInstructions = (deckSummary: string) => `You are a helpful teaching assistant. Always respond in English.
+const buildAgentInstructions = (deckSummary: string) => `You are an encouraging and knowledgeable teaching assistant. Always respond in English. Be warm, clear, and concise while helping students learn.
+
+CRITICAL RULE: You have tools. ALWAYS use the correct tool instead of describing content verbally. Never recite flashcard content, diagram content, or document content out loud — always call the appropriate tool and let the UI display it.
 
 FLASHCARD MANAGEMENT:
-- Only generate flashcards when the user explicitly requests them.
-- Call generate_flashcards with topic (and focus if available).
-- After generating flashcards, confirm count and ask if the user wants to review.
+- When the user asks for flashcards on any topic, you MUST call generate_flashcards immediately. Do not describe or recite flashcard content verbally.
+- Do NOT proactively suggest flashcards unless the user asks.
+- Call generate_flashcards with the topic (and focus if provided). The cards will appear on screen automatically.
+- After the tool returns, say only how many cards were created and invite the user to start reviewing.
+- If the tool fails, apologize briefly and ask whether they'd like to try again.
 
 FLASHCARD NAVIGATION:
-- Use get_current_flashcard_context before discussing a card.
-- Use flip_flashcard, next_flashcard, previous_flashcard when asked.
-- Do not reveal hidden answers unless the card is flipped.
+- Call get_current_flashcard_context to understand which card the user is viewing before discussing it.
+- When the user asks to flip the card, show the answer, or reveal the answer, call flip_flashcard.
+- When the user asks to go to the next card or move forward, call next_flashcard.
+- When the user asks to go back or see the previous card, call previous_flashcard.
+
+FLASHCARD GUIDANCE:
+- After calling get_current_flashcard_context, use the response to guide the discussion.
+- If the card is NOT flipped: discuss the topic, offer hints, and expand on concepts, but DO NOT reveal the exact answer text.
+- If the card IS flipped: discuss the answer openly and compare the student's response to the correct answer.
+- Always be encouraging and educational.
 
 CANVAS AWARENESS:
-- Only call get_canvas_snapshot when the user asks about their drawing or canvas content.
+- ONLY call get_canvas_snapshot when the user explicitly refers to what they drew or asks you to inspect the canvas.
+- Examples: "What did I draw?", "Can you see what's on the canvas?", "Based on what I drew, what do you understand?"
+- Do NOT call this tool proactively.
+- Include conversationContext when helpful, such as: "We've been discussing mitosis and cell division."
+- If the canvas is empty, clearly tell the user nothing is drawn yet.
 
-VISUALIZATION:
-- Use generate_visualization when user asks for an image/diagram.
-- Set includeCanvasImage=true only when the user asks to enhance current canvas work.
-- Use show_flashcards when user asks to return to flashcards.
+VISUALIZATION GENERATION:
+- When the user asks for an image, illustration, diagram, chart, flowchart, or visual aid, call generate_visualization.
+- Pass a detailed imageDescription with subject, style, composition, labels, colors, and key details.
+- Set includeCanvasImage=true ONLY when the user asks to enhance or build on their existing canvas drawing.
+- After generating, tell the user the visualization is ready.
+- When the user wants to return to flashcards, call show_flashcards.
 
-DEEP DIVE:
-- Use generate_deep_dive when user asks for a deep explanation or comprehensive overview.
+DEEP DIVE GENERATION:
+- When the user asks for a deep dive, comprehensive overview, or detailed explanation, call generate_deep_dive.
+- Build the topic parameter with full context. If the user references the canvas, embed that context (example: "photosynthesis, focusing on the chloroplast structure the student drew").
+- Include relevant conversation context in the topic so the output stays grounded.
+- After generating, tell the user the deep dive is ready.
+- When the user wants to return to flashcards, call show_flashcards.
+
+DOCS AND SHEETS ARTIFACTS:
+- When the user asks for a memo, notes, or document, call create_google_doc.
+- When the user asks for a spreadsheet, table, tracker, or structured dataset, call create_google_sheet.
+- After each artifact is generated, confirm it is ready in the corresponding tab.
 
 ERROR HANDLING:
-- If a tool fails, apologize briefly and ask whether they want to retry.
+- If any tool fails, apologize briefly and ask whether they'd like to try again.
+- If there are no flashcards loaded and the user tries to navigate cards, suggest generating a deck first.
 
 ${deckSummary}`;
 
@@ -160,11 +169,13 @@ export const useVoiceAgent = (
   _deepDiveState: DeepDiveState,
   deepDiveActions: DeepDiveActions,
   setContentView: (view: 'flashcards' | 'visualization' | 'deepdive') => void,
+  onSetGoogleDoc?: (title: string, summary: string, sections: GoogleDocSection[]) => void,
+  onSetGoogleSheet?: (title: string, summary: string, sheets: GoogleSheetTab[]) => void,
   onToolEvent?: (event: VoiceToolEvent) => void,
 ) => {
   const sessionRef = useRef<Session | null>(null);
-  const toolHandlersRef = useRef<Record<string, GeminiToolHandler>>({});
   const sessionResumptionHandleRef = useRef<string | undefined>(undefined);
+  const handleServerMessageRef = useRef<(message: LiveServerMessage) => Promise<void>>(async () => {});
 
   const flashcardSessionRef = useRef<FlashcardSessionState>(flashcardSession);
   const statusRef = useRef<VoiceStatus>("idle");
@@ -200,32 +211,36 @@ export const useVoiceAgent = (
     setModeRef.current = flashcardActions.setMode;
   }, [flashcardActions]);
 
-  const toolHandlers = useMemo(
-    () => ({
-      ...createFlashcardToolHandlers({
-        actions: flashcardActions,
+  // Build ADK FunctionTool instances; derive FunctionDeclarations and tool map from them.
+  const adkTools = useMemo(
+    () =>
+      createAdkTools({
+        flashcardActions,
         getFlashcardSession: () => flashcardSessionRef.current,
-        setContentView,
-      }),
-      ...createCanvasToolHandlers({
+        visualizationActions,
+        deepDiveActions,
         getCanvasEditor: () => canvasEditorRef.current,
-      }),
-      ...createVisualizationToolHandlers({
-        getCanvasEditor: () => canvasEditorRef.current,
-        actions: visualizationActions,
         setContentView,
+        onSetGoogleDoc,
+        onSetGoogleSheet,
       }),
-      ...createDeepDiveToolHandlers({
-        actions: deepDiveActions,
-        setContentView,
-      }),
-    }),
-    [flashcardActions, visualizationActions, deepDiveActions, setContentView],
+    [
+      flashcardActions,
+      visualizationActions,
+      deepDiveActions,
+      setContentView,
+      onSetGoogleDoc,
+      onSetGoogleSheet,
+    ],
   );
 
+  const adkToolMapRef = useRef<Map<string, FunctionTool>>(new Map());
+  const adkFunctionDeclarationsRef = useRef<ReturnType<FunctionTool['_getDeclaration']>[]>([]);
+
   useEffect(() => {
-    toolHandlersRef.current = toolHandlers;
-  }, [toolHandlers]);
+    adkToolMapRef.current = new Map(adkTools.map((t) => [t.name, t]));
+    adkFunctionDeclarationsRef.current = adkTools.map((t) => t._getDeclaration());
+  }, [adkTools]);
 
   const stopPlaybackQueue = useCallback(() => {
     for (const source of playbackSourcesRef.current) {
@@ -382,105 +397,55 @@ export const useVoiceAgent = (
 
   const handleToolCalls = useCallback(async (functionCalls: FunctionCall[]) => {
     const session = sessionRef.current;
-    if (!session || functionCalls.length === 0) {
-      return;
-    }
+    if (!session || functionCalls.length === 0) return;
+
+    console.log("[useVoiceAgent] handleToolCalls", functionCalls.map((c) => c.name));
 
     const responses = await Promise.all(
       functionCalls.map(async (call) => {
         const toolName = call.name ?? "";
-        const handler = toolHandlersRef.current[toolName];
-
-        if (!handler) {
-          const args =
-            call.args && typeof call.args === "object"
-              ? (call.args as Record<string, unknown>)
-              : {};
-          onToolEvent?.({
-            id: call.id ?? `${toolName}-${Date.now()}`,
-            toolName,
-            args,
-            success: false,
-            message: `No handler registered for tool: ${toolName}`,
-            timestamp: new Date(),
-          });
-          return {
-            id: call.id,
-            name: toolName,
-            response: {
-              error: `No handler registered for tool: ${toolName}`,
-            },
-          };
-        }
+        const args =
+          call.args && typeof call.args === "object"
+            ? (call.args as Record<string, unknown>)
+            : {};
 
         try {
-          const args =
-            call.args && typeof call.args === "object"
-              ? (call.args as Record<string, unknown>)
-              : {};
+          // Dispatch via ADK FunctionTool — Zod-validated, proper Schema declarations
+          const output = await runAdkTool(adkToolMapRef.current, toolName, args);
+          const success = typeof output.success === "boolean" ? output.success : true;
+          const message = typeof output.message === "string" ? output.message : `${toolName} ${success ? "completed" : "failed"}`;
 
-          const output = await handler(args);
-          const success =
-            typeof output.success === "boolean" ? output.success : true;
-          const message =
-            typeof output.message === "string"
-              ? output.message
-              : success
-                ? `${toolName} completed`
-                : `${toolName} failed`;
-
-          onToolEvent?.({
-            id: call.id ?? `${toolName}-${Date.now()}`,
-            toolName,
-            args,
-            success,
-            message,
-            timestamp: new Date(),
-          });
-          return {
-            id: call.id,
-            name: toolName,
-            response: {
-              output,
-            },
-          };
-        } catch (toolError) {
-          const message =
-            toolError instanceof Error ? toolError.message : "Unknown tool error";
-          const args =
-            call.args && typeof call.args === "object"
-              ? (call.args as Record<string, unknown>)
-              : {};
-
-          onToolEvent?.({
-            id: call.id ?? `${toolName}-${Date.now()}`,
-            toolName,
-            args,
-            success: false,
-            message,
-            timestamp: new Date(),
-          });
-
-          return {
-            id: call.id,
-            name: toolName,
-            response: {
-              error: message,
-            },
-          };
+          onToolEvent?.({ id: call.id ?? `${toolName}-${Date.now()}`, toolName, args, success, message, output, timestamp: new Date() });
+          return { id: call.id, name: toolName, response: { output } };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Unknown tool error";
+          onToolEvent?.({ id: call.id ?? `${toolName}-${Date.now()}`, toolName, args, success: false, message, timestamp: new Date() });
+          return { id: call.id, name: toolName, response: { error: message } };
         }
       }),
     );
 
-    session.sendToolResponse({
-      functionResponses: responses,
-    });
+    session.sendToolResponse({ functionResponses: responses });
   }, [onToolEvent]);
 
   const handleServerMessage = useCallback(
     async (message: LiveServerMessage) => {
+      // Log any message that contains a tool call or function call reference
+      const msgKeys = Object.keys(message).filter((k) => message[k as keyof LiveServerMessage] !== undefined && message[k as keyof LiveServerMessage] !== null);
+      if (msgKeys.some((k) => k.toLowerCase().includes("tool") || k.toLowerCase().includes("function"))) {
+        console.log("[useVoiceAgent] message with tool/function key", { keys: msgKeys, message });
+      }
+
       const content = message.serverContent;
       const resumptionUpdate = message.sessionResumptionUpdate;
+
+      // Log all non-audio parts for debugging tool dispatch
+      if (content?.modelTurn?.parts) {
+        const nonAudio = content.modelTurn.parts.filter((p) => !p.inlineData?.mimeType?.startsWith("audio/"));
+        if (nonAudio.length > 0) {
+          console.log("[useVoiceAgent] modelTurn non-audio parts", nonAudio);
+        }
+      }
 
       if (resumptionUpdate?.resumable && resumptionUpdate.newHandle) {
         sessionResumptionHandleRef.current = resumptionUpdate.newHandle;
@@ -503,13 +468,33 @@ export const useVoiceAgent = (
         }
       }
 
-      const functionCalls = message.toolCall?.functionCalls ?? [];
+      // Collect function calls from both message.toolCall and modelTurn parts
+      const toolCallFcs = message.toolCall?.functionCalls ?? [];
+      const partFcs: FunctionCall[] = (content?.modelTurn?.parts ?? [])
+        .filter((p) => p.functionCall != null)
+        .map((p) => p.functionCall as FunctionCall);
+
+      if (message.toolCall) {
+        console.log("[useVoiceAgent] toolCall message received", {
+          functionCalls: message.toolCall.functionCalls?.map((c) => ({ name: c.name, args: c.args })),
+        });
+      }
+      if (partFcs.length > 0) {
+        console.log("[useVoiceAgent] functionCall parts in modelTurn", partFcs.map((c) => ({ name: c.name, args: c.args })));
+      }
+
+      const functionCalls = [...toolCallFcs, ...partFcs];
       if (functionCalls.length > 0) {
         await handleToolCalls(functionCalls);
       }
     },
     [handleToolCalls, queueAudioForPlayback, stopPlaybackQueue],
   );
+
+  // Keep the ref in sync so the Gemini session's onmessage always calls the latest version.
+  useEffect(() => {
+    handleServerMessageRef.current = handleServerMessage;
+  }, [handleServerMessage]);
 
   const disconnectAgent = useCallback(async () => {
     const session = sessionRef.current;
@@ -537,6 +522,9 @@ export const useVoiceAgent = (
     if (statusRef.current === "connecting" || statusRef.current === "connected") {
       return;
     }
+
+    // Always start fresh — don't carry over stale session context from a previous run.
+    sessionResumptionHandleRef.current = undefined;
 
     setStatus("requesting-permission");
     setError(null);
@@ -576,7 +564,7 @@ export const useVoiceAgent = (
       const liveConfig = {
         responseModalities: [Modality.AUDIO],
         systemInstruction: buildAgentInstructions(deckSummary),
-        tools: [{ functionDeclarations: FUNCTION_DECLARATIONS }],
+        tools: [{ functionDeclarations: adkFunctionDeclarationsRef.current }],
         inputAudioTranscription: {},
         outputAudioTranscription: {},
         ...(LIVE_ENABLE_SESSION_RESUMPTION
@@ -607,7 +595,7 @@ export const useVoiceAgent = (
         config: liveConfig,
         callbacks: {
           onmessage: (event) => {
-            void handleServerMessage(event);
+            void handleServerMessageRef.current(event);
           },
           onerror: (event) => {
             const message = event.error?.message ?? "Live session error";
@@ -645,7 +633,6 @@ export const useVoiceAgent = (
   }, [
     closePlayback,
     disconnectAgent,
-    handleServerMessage,
     startMicrophoneCapture,
     stopMicrophoneCapture,
   ]);

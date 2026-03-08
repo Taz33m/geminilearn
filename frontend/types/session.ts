@@ -24,7 +24,9 @@ export interface SessionEvent {
 export type SessionArtifactType =
   | "flashcard_deck"
   | "visualization_image"
-  | "deep_dive_bundle";
+  | "deep_dive_bundle"
+  | "google_doc"
+  | "google_sheet";
 
 interface SessionArtifactBase {
   id: string;
@@ -52,10 +54,34 @@ export interface DeepDiveArtifact extends SessionArtifactBase {
   imageData: string;
 }
 
+export interface GoogleDocSection {
+  heading: string;
+  content: string;
+  bullets: string[];
+}
+
+export interface GoogleDocArtifact extends SessionArtifactBase {
+  type: "google_doc";
+  sections: GoogleDocSection[];
+}
+
+export interface GoogleSheetTab {
+  name: string;
+  columns: string[];
+  rows: string[][];
+}
+
+export interface GoogleSheetArtifact extends SessionArtifactBase {
+  type: "google_sheet";
+  sheets: GoogleSheetTab[];
+}
+
 export type SessionArtifact =
   | FlashcardDeckArtifact
   | VisualizationArtifact
-  | DeepDiveArtifact;
+  | DeepDiveArtifact
+  | GoogleDocArtifact
+  | GoogleSheetArtifact;
 
 export interface SessionSnapshot {
   contentView: ContentView;

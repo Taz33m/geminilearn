@@ -1,5 +1,7 @@
 import type {
   ContentView,
+  GoogleDocSection,
+  GoogleSheetTab,
   SessionArtifact,
   SessionEvent,
   TutorSession,
@@ -22,6 +24,9 @@ const toSafeDate = (value: unknown) => {
   }
   return new Date();
 };
+
+const toSafeId = (prefix: "event" | "artifact") =>
+  `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 const coerceContentView = (value: unknown): ContentView => {
   if (
@@ -100,7 +105,7 @@ const normalizeEvent = (event: unknown): SessionEvent | null => {
     id:
       typeof candidate.id === "string" && candidate.id.length > 0
         ? candidate.id
-        : `event-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        : toSafeId("event"),
     type: eventType,
     timestamp: toSafeDate(candidate.timestamp),
     text: candidate.text,
@@ -109,6 +114,68 @@ const normalizeEvent = (event: unknown): SessionEvent | null => {
         ? (candidate.metadata as Record<string, unknown>)
         : undefined,
   };
+};
+
+const normalizeDocSections = (sections: unknown): GoogleDocSection[] => {
+  if (!Array.isArray(sections)) return [];
+
+  return sections
+    .map((section) => {
+      if (!section || typeof section !== "object") return null;
+      const candidate = section as Record<string, unknown>;
+
+      const heading =
+        typeof candidate.heading === "string" ? candidate.heading : "Section";
+      const content =
+        typeof candidate.content === "string" ? candidate.content : "";
+      const bullets = Array.isArray(candidate.bullets)
+        ? candidate.bullets.filter((entry): entry is string => typeof entry === "string")
+        : [];
+
+      return { heading, content, bullets };
+    })
+    .filter(Boolean) as GoogleDocSection[];
+};
+
+const normalizeSheetTabs = (tabs: unknown): GoogleSheetTab[] => {
+  if (!Array.isArray(tabs)) return [];
+
+  return tabs
+    .map((tab, index) => {
+      if (!tab || typeof tab !== "object") return null;
+      const candidate = tab as Record<string, unknown>;
+
+      const columns = Array.isArray(candidate.columns)
+        ? candidate.columns.filter((entry): entry is string => typeof entry === "string")
+        : [];
+
+      const safeColumns = columns.length > 1 ? columns : ["Column A", "Column B"];
+
+      const rows = Array.isArray(candidate.rows)
+        ? candidate.rows
+            .map((row) => {
+              if (!Array.isArray(row)) return null;
+              const normalized = row
+                .slice(0, safeColumns.length)
+                .map((cell) => (typeof cell === "string" ? cell : String(cell ?? "")));
+              while (normalized.length < safeColumns.length) {
+                normalized.push("");
+              }
+              return normalized;
+            })
+            .filter(Boolean)
+        : [];
+
+      return {
+        name:
+          typeof candidate.name === "string" && candidate.name.length > 0
+            ? candidate.name
+            : `Sheet ${index + 1}`,
+        columns: safeColumns,
+        rows: rows as string[][],
+      };
+    })
+    .filter(Boolean) as GoogleSheetTab[];
 };
 
 const normalizeArtifact = (artifact: unknown): SessionArtifact | null => {
@@ -120,7 +187,9 @@ const normalizeArtifact = (artifact: unknown): SessionArtifact | null => {
   if (
     candidate.type !== "flashcard_deck" &&
     candidate.type !== "visualization_image" &&
-    candidate.type !== "deep_dive_bundle"
+    candidate.type !== "deep_dive_bundle" &&
+    candidate.type !== "google_doc" &&
+    candidate.type !== "google_sheet"
   ) {
     return null;
   }
@@ -129,7 +198,7 @@ const normalizeArtifact = (artifact: unknown): SessionArtifact | null => {
     id:
       typeof candidate.id === "string" && candidate.id.length > 0
         ? candidate.id
-        : `artifact-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        : toSafeId("artifact"),
     type: candidate.type,
     title: candidate.title,
     createdAt: toSafeDate(candidate.createdAt),
@@ -162,18 +231,34 @@ const normalizeArtifact = (artifact: unknown): SessionArtifact | null => {
     };
   }
 
+  if (candidate.type === "deep_dive_bundle") {
+    return {
+      ...base,
+      type: "deep_dive_bundle",
+      topic: typeof artifactRecord.topic === "string" ? artifactRecord.topic : "",
+      overviewText:
+        typeof artifactRecord.overviewText === "string"
+          ? artifactRecord.overviewText
+          : "",
+      imageData:
+        typeof artifactRecord.imageData === "string"
+          ? artifactRecord.imageData
+          : "",
+    };
+  }
+
+  if (candidate.type === "google_doc") {
+    return {
+      ...base,
+      type: "google_doc",
+      sections: normalizeDocSections(artifactRecord.sections),
+    };
+  }
+
   return {
     ...base,
-    type: "deep_dive_bundle",
-    topic: typeof artifactRecord.topic === "string" ? artifactRecord.topic : "",
-    overviewText:
-      typeof artifactRecord.overviewText === "string"
-        ? artifactRecord.overviewText
-        : "",
-    imageData:
-      typeof artifactRecord.imageData === "string"
-        ? artifactRecord.imageData
-        : "",
+    type: "google_sheet",
+    sheets: normalizeSheetTabs(artifactRecord.sheets),
   };
 };
 

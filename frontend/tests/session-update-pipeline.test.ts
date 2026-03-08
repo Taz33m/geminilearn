@@ -14,6 +14,21 @@ const createFlashcardArtifact = (id: string) => ({
   cardCount: 5,
 });
 
+const createGoogleDocArtifact = (id: string) => ({
+  id,
+  type: "google_doc" as const,
+  title: `Memo ${id}`,
+  createdAt: NOW,
+  summary: "Generated study memo.",
+  sections: [
+    {
+      heading: "Overview",
+      content: "Key ideas.",
+      bullets: ["Point A"],
+    },
+  ],
+});
+
 const createSession = (overrides?: Partial<TutorSession>): TutorSession => ({
   id: "session-1",
   title: "Session 1",
@@ -123,6 +138,21 @@ describe("session update pipeline", () => {
     });
 
     expect(updated.summary).toBe("Session produced 1 flashcard deck.");
+  });
+
+  it("recomputes deterministic summary for google doc artifacts", () => {
+    const session = createSession();
+    const artifact = createGoogleDocArtifact("doc-1");
+
+    const [updated] = applySessionUpdate({
+      sessions: [session],
+      sessionId: session.id,
+      snapshot: session.snapshot,
+      appendArtifact: artifact,
+      updatedAt: NOW,
+    });
+
+    expect(updated.summary).toBe("Session produced 1 google doc.");
   });
 
   it("updates status and endedAt for session end event", () => {

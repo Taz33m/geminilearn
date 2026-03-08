@@ -4,7 +4,6 @@ import {
   hasDocsArtifact,
   hasQuizArtifact,
   hasSheetsArtifact,
-  hasSlidesArtifact,
 } from "../lib/workspace-tabs";
 import type { DeepDiveState } from "../types/deepdive";
 import type { FlashcardSessionState } from "../types/flashcard";
@@ -85,18 +84,9 @@ describe("tool event tab detection", () => {
     expect(tabs.map((tab) => tab.id)).toContain("docs");
   });
 
-  it("adds Sheets tab from artifact text", () => {
+  it("adds Sheets tab from tool event metadata", () => {
     const session = createSession({
-      artifacts: [
-        {
-          id: "artifact-sheet",
-          type: "flashcard_deck",
-          title: "Quarterly Spreadsheet",
-          createdAt: NOW,
-          summary: "Contains budget sheet and forecasts",
-          cardCount: 0,
-        },
-      ],
+      events: [createEvent("create_google_sheet")],
     });
 
     expect(hasSheetsArtifact(session)).toBe(true);
@@ -110,13 +100,43 @@ describe("tool event tab detection", () => {
     expect(tabs.map((tab) => tab.id)).toContain("sheets");
   });
 
-  it("adds Slides and Quiz tabs from event keywords", () => {
+  it("adds docs and sheets tabs from explicit artifact types", () => {
     const session = createSession({
-      events: [createEvent("build_presentation"), createEvent("generate_quiz")],
+      artifacts: [
+        {
+          id: "artifact-doc",
+          type: "google_doc",
+          title: "Mitosis Memo",
+          createdAt: NOW,
+          summary: "A concise mitosis memo.",
+          sections: [
+            {
+              heading: "Overview",
+              content: "Mitosis has multiple phases.",
+              bullets: ["Prophase", "Metaphase"],
+            },
+          ],
+        },
+        {
+          id: "artifact-sheet",
+          type: "google_sheet",
+          title: "Study Tracker",
+          createdAt: NOW,
+          summary: "Weekly study plan.",
+          sheets: [
+            {
+              name: "Plan",
+              columns: ["Day", "Topic"],
+              rows: [["Mon", "Biology"]],
+            },
+          ],
+        },
+      ],
     });
 
-    expect(hasSlidesArtifact(session)).toBe(true);
-    expect(hasQuizArtifact(session)).toBe(true);
+    expect(hasDocsArtifact(session)).toBe(true);
+    expect(hasSheetsArtifact(session)).toBe(true);
+
     const tabs = buildWorkspaceTabs({
       flashcardSession: IDLE_FLASHCARDS,
       visualizationState: IDLE_VISUALIZATION,
@@ -124,35 +144,35 @@ describe("tool event tab detection", () => {
       activeSession: session,
     });
 
-    expect(tabs.map((tab) => tab.id)).toEqual(["canvas", "slides", "quiz"]);
+    expect(tabs.map((tab) => tab.id)).toEqual(["canvas", "sheets", "docs"]);
   });
 
-  it("never includes replay tab", () => {
+  it("adds Quiz tab from event keywords and never adds slides", () => {
     const session = createSession({
-      events: [createEvent("generate_flashcards")],
+      events: [createEvent("generate_quiz"), createEvent("build_presentation")],
     });
 
+    expect(hasQuizArtifact(session)).toBe(true);
+
     const tabs = buildWorkspaceTabs({
-      flashcardSession: {
-        ...IDLE_FLASHCARDS,
-        mode: "reviewing",
-      },
-      visualizationState: {
-        ...IDLE_VISUALIZATION,
-        mode: "ready",
-        imageData: "data:image/png;base64,abc",
-      },
+      flashcardSession: IDLE_FLASHCARDS,
+      visualizationState: IDLE_VISUALIZATION,
       deepDiveState: IDLE_DEEPDIVE,
       activeSession: session,
     });
 
     const tabIds = tabs.map((tab) => tab.id as string);
-    expect(tabIds).not.toContain("replay");
+    expect(tabIds).toContain("quiz");
+    expect(tabIds).not.toContain("slides");
   });
 
   it("keeps stable tab order across content and tool artifacts", () => {
     const session = createSession({
-      events: [createEvent("GOOGLE_DOC"), createEvent("EXCEL_SHEET"), createEvent("pptx_export"), createEvent("exam_builder")],
+      events: [
+        createEvent("create_google_doc"),
+        createEvent("create_google_sheet"),
+        createEvent("exam_builder"),
+      ],
     });
 
     const tabs = buildWorkspaceTabs({
@@ -180,7 +200,6 @@ describe("tool event tab detection", () => {
       "deepdive",
       "sheets",
       "docs",
-      "slides",
       "quiz",
     ]);
   });
