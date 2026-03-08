@@ -1,0 +1,11 @@
+.cursor/
+.DS_Store
+node_modules/
+dist/
+build/
+*.log
+.env
+*.env
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

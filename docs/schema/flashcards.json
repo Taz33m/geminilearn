@@ -1,0 +1,74 @@
+{
+  "$defs": {
+    "Flashcard": {
+      "description": "Single flashcard entry used by the AI-generated deck.",
+      "properties": {
+        "id": {
+          "description": "Stable identifier for the card within the deck.",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "description": "Short human-friendly title for the concept.",
+          "title": "Title",
+          "type": "string"
+        },
+        "coreIdea": {
+          "description": "One or two sentences summarising the key idea.",
+          "title": "Coreidea",
+          "type": "string"
+        },
+        "question": {
+          "description": "Prompt presented to the learner.",
+          "title": "Question",
+          "type": "string"
+        },
+        "answer": {
+          "description": "Concise answer to the question.",
+          "title": "Answer",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional citation showing where the content originated.",
+          "title": "Source"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "coreIdea",
+        "question",
+        "answer"
+      ],
+      "title": "Flashcard",
+      "type": "object"
+    }
+  },
+  "description": "Container returned by the model when generating flashcards.",
+  "properties": {
+    "flashcards": {
+      "description": "List of flashcards ordered for presentation.",
+      "items": {
+        "$ref": "#/$defs/Flashcard"
+      },
+      "maxItems": 8,
+      "minItems": 3,
+      "title": "Flashcards",
+      "type": "array"
+    }
+  },
+  "required": [
+    "flashcards"
+  ],
+  "title": "FlashcardSet",
+  "type": "object"
+}
